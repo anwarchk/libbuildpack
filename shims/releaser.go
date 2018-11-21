@@ -24,10 +24,12 @@ type inputMetadata struct {
 	}
 }
 
+type defaultProcessTypes struct {
+	Web string `yaml:"web"`
+}
+
 type outputMetadata struct {
-	DefaultProcessTypes struct {
-		Web string
-	} `yaml:"default_process_types"`
+	DefaultProcessTypes defaultProcessTypes `yaml:"default_process_types"`
 }
 
 func (i *inputMetadata) findCommand(processType string) (string, error) {
@@ -50,6 +52,6 @@ func (r *Releaser) Release() error {
 		return err
 	}
 
-	output := outputMetadata{DefaultProcessTypes: struct{ Web string }{Web: webCommand}}
+	output := outputMetadata{DefaultProcessTypes: defaultProcessTypes{Web: webCommand}}
 	return yaml.NewEncoder(r.Writer).Encode(output)
 }
