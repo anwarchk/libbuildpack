@@ -22,7 +22,6 @@ func (d *DefaultDetector) Detect() error {
 		"-app", d.AppDir,
 		"-buildpacks", d.BuildpacksDir,
 		"-group", d.GroupMetadata,
-		"-launch", d.LaunchDir,
 		"-order", d.OrderMetadata,
 		"-plan", d.PlanMetadata,
 	)

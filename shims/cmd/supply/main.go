@@ -11,6 +11,7 @@ import (
 
 func main() {
 	if err := supply(); err != nil {
+		log.Println("FAILED SUPPLY")
 		log.Fatal(err)
 	}
 }

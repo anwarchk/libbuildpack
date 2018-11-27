@@ -123,15 +123,19 @@ var _ = Describe("Shims", func() {
 
 	Describe("Finalizer", func() {
 		var (
-			finalizer                      shims.Finalizer
-			depsDir, depsIndex, profileDir string
+			finalizer                                                                       shims.Finalizer
+			depsDir, depsIndex, profileDir, appDir, binDir, launchDir, metadataPath, tmpDir string
 		)
 
 		BeforeEach(func() {
 			var err error
 
-			depsDir, err = ioutil.TempDir("", "deps")
+			tmpDir, err = ioutil.TempDir("", "")
 			Expect(err).NotTo(HaveOccurred())
+			binDir = filepath.Join(tmpDir, "bin")
+			os.MkdirAll(binDir, 0777)
+			appDir = filepath.Join(tmpDir, "app")
+			depsDir = filepath.Join(tmpDir, "deps")
 
 			depsIndex = "0"
 
@@ -150,18 +154,19 @@ var _ = Describe("Shims", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			finalizer = shims.Finalizer{
-				DepsDir:    depsDir,
-				DepsIndex:  depsIndex,
-				ProfileDir: profileDir,
+				AppDir:       appDir,
+				BinDir:       binDir,
+				LaunchDir:    launchDir,
+				MetadataPath: metadataPath,
 			}
 		})
 
 		AfterEach(func() {
-			os.RemoveAll(depsDir)
+			os.RemoveAll(tmpDir)
 			os.RemoveAll(profileDir)
 		})
 
-		It("runs with the correct arguments and moves things to the correct place", func() {
+		FIt("runs with the correct arguments and moves things to the correct place", func() {
 			Expect(finalizer.Finalize()).To(Succeed())
 
 			Expect(filepath.Join(profileDir, "some_script.sh")).To(BeAnExistingFile())

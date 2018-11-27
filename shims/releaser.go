@@ -4,17 +4,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v2"
 )
 
-const setupPathContent = "export PATH={{ range $_, $path := . }}{{ $path }}:{{ end }}$PATH"
-
 type Releaser struct {
-	BuildDir string
-	Writer   io.Writer
+	MetadataPath string
+	Writer       io.Writer
 }
 
 type inputMetadata struct {
@@ -42,7 +39,7 @@ func (i *inputMetadata) findCommand(processType string) (string, error) {
 }
 
 func (r *Releaser) Release() error {
-	metadataFile, input := filepath.Join(r.BuildDir, ".cloudfoundry", "metadata.toml"), inputMetadata{}
+	metadataFile, input := r.MetadataPath, inputMetadata{}
 	_, err := toml.DecodeFile(metadataFile, &input)
 
 	defer os.Remove(metadataFile)

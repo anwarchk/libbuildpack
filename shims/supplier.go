@@ -1,9 +1,12 @@
 package shims
 
 import (
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/cloudfoundry/libbuildpack"
 )
 
 type Detector interface {
@@ -27,6 +30,10 @@ type Supplier struct {
 }
 
 func (s *Supplier) Supply() error {
+	if err := os.RemoveAll(s.CNBAppDir); err != nil {
+		return err
+	}
+
 	if err := os.Rename(s.V2BuildDir, s.CNBAppDir); err != nil {
 		return err
 	}
@@ -43,7 +50,20 @@ func (s *Supplier) Supply() error {
 		return err
 	}
 
+	if err := s.InstallV3Launcher(s.DepsDir); err != nil {
+		return err
+	}
+
 	return s.MoveLayers()
+}
+
+func (s *Supplier) InstallV3Launcher(dstDir string) error {
+	contents, err := ioutil.ReadFile(filepath.Join(s.BinDir, "v3-launcher")) // don't copy
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(filepath.Join(dstDir, "v3-launcher"), contents, 0777)
 }
 
 func (s *Supplier) MoveLayers() error {
@@ -54,13 +74,21 @@ func (s *Supplier) MoveLayers() error {
 
 	for _, layer := range layers {
 		if filepath.Base(layer) == "config" {
-			if err := os.Mkdir(filepath.Join(s.V2BuildDir, ".cloudfoundry"), 0777); err != nil {
+			if err := os.Mkdir(filepath.Join(s.DepsDir, s.DepsIndex, "config"), 0777); err != nil {
 				return err
 			}
-			err = os.Rename(filepath.Join(s.LaunchDir, "config", "metadata.toml"), filepath.Join(s.V2BuildDir, ".cloudfoundry", "metadata.toml"))
+			err = libbuildpack.CopyFile(filepath.Join(s.LaunchDir, "config", "metadata.toml"), filepath.Join(s.DepsDir, s.DepsIndex, "config", "metadata.toml"))
 			if err != nil {
 				return err
 			}
+
+			//if err := os.Mkdir(filepath.Join(s.V2BuildDir, ".cloudfoundry"), 0777); err != nil { //should this be here?
+			//	return err
+			//}
+			//err = os.Rename(filepath.Join(s.LaunchDir, "config", "metadata.toml"), filepath.Join(s.V2BuildDir, ".cloudfoundry", "metadata.toml"))
+			//if err != nil {
+			//	return err
+			//}
 		} else {
 			err := os.Rename(layer, filepath.Join(s.DepsDir, s.DepsIndex, filepath.Base(layer)))
 			if err != nil {

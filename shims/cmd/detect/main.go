@@ -38,6 +38,7 @@ func main() {
 
 	err = detector.Detect()
 	if err != nil {
+		log.Println("FAILED DETECT")
 		log.Fatal(err)
 	}
 }
