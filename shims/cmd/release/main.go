@@ -16,12 +16,8 @@ func main() {
 
 	metadataPath := filepath.Join(os.Args[1], ".cloudfoundry", "metadata.toml")
 
-	releaser := shims.Releaser{
-		MetadataPath: metadataPath,
-		Writer:       os.Stdout,
-	}
+	releaser := shims.Releaser{MetadataPath: metadataPath, Writer: os.Stdout}
 	if err := releaser.Release(); err != nil {
-		log.Println("FAILED RELEASE")
 		log.Fatal(err)
 	}
 }

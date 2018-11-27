@@ -11,7 +11,6 @@ import (
 
 func main() {
 	if err := supply(); err != nil {
-		log.Println("FAILED SUPPLY")
 		log.Fatal(err)
 	}
 }
@@ -25,6 +24,7 @@ func supply() error {
 	if err != nil {
 		return err
 	}
+
 	buildDir := os.Args[1]
 	cacheDir := os.Args[2]
 	depsDir := os.Args[3]
@@ -35,13 +35,12 @@ func supply() error {
 		return err
 	}
 
-	launchDir := filepath.Join(string(filepath.Separator), "home", "vcap", "deps", depsIndex) // Does the index matter?
+	launchDir := filepath.Join(string(filepath.Separator), "home", "vcap", "deps", depsIndex)
 
 	err = os.MkdirAll(launchDir, 0777)
 	if err != nil {
 		return err
 	}
-
 	defer os.RemoveAll(launchDir)
 
 	cnbAppDir := filepath.Join(string(filepath.Separator), "home", "vcap", "app")

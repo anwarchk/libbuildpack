@@ -123,59 +123,36 @@ var _ = Describe("Shims", func() {
 
 	Describe("Finalizer", func() {
 		var (
-			finalizer                                                                       shims.Finalizer
-			depsDir, depsIndex, profileDir, appDir, binDir, launchDir, metadataPath, tmpDir string
+			finalizer             shims.Finalizer
+			profileDir, depsIndex string
 		)
 
 		BeforeEach(func() {
 			var err error
 
-			tmpDir, err = ioutil.TempDir("", "")
-			Expect(err).NotTo(HaveOccurred())
-			binDir = filepath.Join(tmpDir, "bin")
-			os.MkdirAll(binDir, 0777)
-			appDir = filepath.Join(tmpDir, "app")
-			depsDir = filepath.Join(tmpDir, "deps")
-
 			depsIndex = "0"
-
-			tempProfileDir := filepath.Join(depsDir, depsIndex, "some-buildpack", "some-dep", "profile.d")
-			Expect(os.MkdirAll(tempProfileDir, 0777)).To(Succeed())
-			Expect(ioutil.WriteFile(filepath.Join(tempProfileDir, "some_script.sh"), []byte(""), 0666)).To(Succeed())
-
-			otherTempProfileDir := filepath.Join(depsDir, depsIndex, "some-other-buildpack", "some-other-dep", "profile.d")
-			Expect(os.MkdirAll(otherTempProfileDir, 0777)).To(Succeed())
-			Expect(ioutil.WriteFile(filepath.Join(otherTempProfileDir, "some_other_script.sh"), []byte(""), 0666)).To(Succeed())
-
-			Expect(os.MkdirAll(filepath.Join(depsDir, depsIndex, "some-buildpack", "some-dep", "bin"), 0777)).To(Succeed())
-			Expect(os.MkdirAll(filepath.Join(depsDir, depsIndex, "some-other-buildpack", "some-other-dep", "bin"), 0777)).To(Succeed())
 
 			profileDir, err = ioutil.TempDir("", "profile")
 			Expect(err).NotTo(HaveOccurred())
 
-			finalizer = shims.Finalizer{
-				AppDir:       appDir,
-				BinDir:       binDir,
-				LaunchDir:    launchDir,
-				MetadataPath: metadataPath,
-			}
+			finalizer = shims.Finalizer{DepsIndex: depsIndex, ProfileDir: profileDir}
 		})
 
 		AfterEach(func() {
-			os.RemoveAll(tmpDir)
 			os.RemoveAll(profileDir)
 		})
 
-		FIt("runs with the correct arguments and moves things to the correct place", func() {
+		It("runs with the correct arguments and moves things to the correct place", func() {
 			Expect(finalizer.Finalize()).To(Succeed())
 
-			Expect(filepath.Join(profileDir, "some_script.sh")).To(BeAnExistingFile())
-			Expect(filepath.Join(profileDir, "some_other_script.sh")).To(BeAnExistingFile())
+			contents, err := ioutil.ReadFile(filepath.Join(profileDir, "0_shim.sh"))
+			Expect(err).NotTo(HaveOccurred())
 
-			Expect(filepath.Join(profileDir, "0.sh")).To(BeAnExistingFile())
-			Expect(ioutil.ReadFile(filepath.Join(profileDir, "0.sh"))).To(Equal([]byte(
-				`export PATH=$DEPS_DIR/0/some-buildpack/some-dep/bin:$DEPS_DIR/0/some-other-buildpack/some-other-dep/bin:$PATH`,
-			)))
+			Expect(string(contents)).To(Equal(`export PACK_STACK_ID="org.cloudfoundry.stacks."
+export PACK_LAUNCH_DIR="$DEPS_DIR/0"
+export PACK_APP_DIR="$HOME"
+exec $DEPS_DIR/v3-launcher "$2"
+`))
 		})
 	})
 
@@ -191,20 +168,21 @@ var _ = Describe("Shims", func() {
 
 			v2BuildDir, err = ioutil.TempDir("", "build")
 			Expect(err).NotTo(HaveOccurred())
+
 			contents := `
-buildpacks = ["some.buildpacks", "some.other.buildpack"]
-[[processes]]
-type = "web"
-command = "npm start"
-`
+			buildpacks = ["some.buildpacks", "some.other.buildpack"]
+			[[processes]]
+			type = "web"
+			command = "npm start"
+			`
 			os.MkdirAll(filepath.Join(v2BuildDir, ".cloudfoundry"), 0777)
 			Expect(ioutil.WriteFile(filepath.Join(v2BuildDir, ".cloudfoundry", "metadata.toml"), []byte(contents), 0666)).To(Succeed())
 
 			buf = &bytes.Buffer{}
 
 			releaser = shims.Releaser{
-				BuildDir: v2BuildDir,
-				Writer:   buf,
+				MetadataPath: filepath.Join(v2BuildDir, ".cloudfoundry", "metadata.toml"),
+				Writer:       buf,
 			}
 		})
 

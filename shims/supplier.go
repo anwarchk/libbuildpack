@@ -77,18 +77,20 @@ func (s *Supplier) MoveLayers() error {
 			if err := os.Mkdir(filepath.Join(s.DepsDir, s.DepsIndex, "config"), 0777); err != nil {
 				return err
 			}
+
 			err = libbuildpack.CopyFile(filepath.Join(s.LaunchDir, "config", "metadata.toml"), filepath.Join(s.DepsDir, s.DepsIndex, "config", "metadata.toml"))
 			if err != nil {
 				return err
 			}
 
-			//if err := os.Mkdir(filepath.Join(s.V2BuildDir, ".cloudfoundry"), 0777); err != nil { //should this be here?
-			//	return err
-			//}
-			//err = os.Rename(filepath.Join(s.LaunchDir, "config", "metadata.toml"), filepath.Join(s.V2BuildDir, ".cloudfoundry", "metadata.toml"))
-			//if err != nil {
-			//	return err
-			//}
+			if err := os.Mkdir(filepath.Join(s.V2BuildDir, ".cloudfoundry"), 0777); err != nil {
+				return err
+			}
+
+			err = os.Rename(filepath.Join(s.LaunchDir, "config", "metadata.toml"), filepath.Join(s.V2BuildDir, ".cloudfoundry", "metadata.toml"))
+			if err != nil {
+				return err
+			}
 		} else {
 			err := os.Rename(layer, filepath.Join(s.DepsDir, s.DepsIndex, filepath.Base(layer)))
 			if err != nil {

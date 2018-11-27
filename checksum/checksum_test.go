@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Checksum", func() {
+var _ = XDescribe("Checksum", func() {
 	var (
 		dir   string
 		lines []string
