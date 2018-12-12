@@ -66,7 +66,26 @@ func (s *Supplier) Supply() error {
 		return err
 	}
 
+	if err := s.ProfileDExecutable(); err != nil {
+		return err
+	}
+
 	return s.MoveLayers()
+
+	// turn our env into shell scripts?
+}
+
+func (s *Supplier) ProfileDExecutable() error {
+	envVars, err := filepath.Glob(filepath.Join(s.V3LaunchDir, "*/*/profile.d/*"))
+	if err != nil {
+		return err
+	}
+	for _, envVar := range envVars {
+		if err := os.Chmod(envVar, 0755); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Supplier) MoveLayers() error {
@@ -95,10 +114,25 @@ func (s *Supplier) MoveLayers() error {
 				return err
 			}
 		} else {
-			err := os.Rename(layer, filepath.Join(s.V2DepsDir, s.V2DepsIndex, filepath.Base(layer)))
+			subLayers, err := filepath.Glob(filepath.Join(layer, "*"))
 			if err != nil {
 				return err
 			}
+			for _, subLayer := range subLayers {
+				f, err := os.Stat(subLayer)
+				if err != nil {
+
+				}
+				if !f.IsDir() {
+					continue
+				}
+
+				err = os.Rename(subLayer, filepath.Join(s.V2DepsDir, fmt.Sprintf("%s_%s_%s", s.V2DepsIndex, filepath.Base(layer), filepath.Base(subLayer))))
+				if err != nil {
+					return err
+				}
+			}
+
 		}
 	}
 
