@@ -84,16 +84,6 @@ func (s *Supplier) Supply() error {
 }
 
 func (s *Supplier) EnsureNoV2AfterV3() error {
-	//cmd := exec.Command("find", "/home")
-	//cmd.Stdout = os.Stdout
-	//cmd.Stderr = os.Stderr
-	//cmd.Run()
-	//
-	//cmd = exec.Command("find", "/tmp")
-	//cmd.Stdout = os.Stdout
-	//cmd.Stderr = os.Stderr
-	//cmd.Run()
-
 	allBuildpacks, err := filepath.Glob(filepath.Join(s.V2BuildpackDir, "..", "*"))
 	if err != nil {
 		return err
