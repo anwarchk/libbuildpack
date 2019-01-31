@@ -90,23 +90,11 @@ func supply(logger *libbuildpack.Logger) error {
 	}
 
 	supplier := shims.Supplier{
-		BinDir: binDir,
-
 		V2AppDir:       v2AppDir,
-		V2DepsDir:      v2DepsDir,
-		V2BuildpackDir: buildpackDir,
-		DepsIndex:      depsIndex,
-
 		V3AppDir:        v3AppDir,
-		V3BuildpacksDir: v3BuildpacksDir,
-		V3LayersDir:     v3LayersDir,
-
-		OrderMetadata: orderMetadata,
-		GroupMetadata: groupMetadata,
-		PlanMetadata:  planMetadata,
-
-		Detector:  detector,
-		Installer: installer,
+		V2DepsDir:      v2DepsDir,
+		DepsIndex:      depsIndex,
+		V2BuildpackDir: buildpackDir,
 	}
 
 	return supplier.Supply()

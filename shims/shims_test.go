@@ -24,122 +24,170 @@ var _ = Describe("Shims", func() {
 	Describe("Supplier", func() {
 		var (
 			supplier        shims.Supplier
-			mockCtrl        *gomock.Controller
-			mockDetector    *MockDetector
-			binDir          string
-			v2BuildDir      string
+			v2AppDir        string
 			v2BuildpacksDir string
-			cnbAppDir       string
-			v3BuildpacksDir string
-			depsDir         string
+			v3AppDir        string
+			v2DepsDir       string
 			depsIndex       string
-			groupMetadata   string
-			layersDir       string
-			orderMetadata   string
-			planMetadata    string
 			tempDir         string
 		)
 
 		BeforeEach(func() {
 			var err error
 
-			mockCtrl = gomock.NewController(GinkgoT())
+			tempDir, err = ioutil.TempDir("", "tmp")
+			Expect(err).NotTo(HaveOccurred())
+
+			v2AppDir = filepath.Join(tempDir, "build")
+			Expect(os.MkdirAll(v2AppDir, 0777)).To(Succeed())
+
+			v3AppDir = filepath.Join(tempDir, "cnb-app")
+
+			v2DepsDir = filepath.Join(tempDir, "deps")
+			depsIndex = "0"
+
+			v2BuildpacksDir = filepath.Join(tempDir, "buildpacks")
+		})
+
+		JustBeforeEach(func() {
+			Expect(os.MkdirAll(filepath.Join(v2DepsDir, depsIndex), 0777)).To(Succeed())
+
+			Expect(os.MkdirAll(filepath.Join(v2BuildpacksDir, depsIndex), 0777)).To(Succeed())
+
+			supplier = shims.Supplier{
+				V2AppDir:       v2AppDir,
+				V2BuildpackDir: filepath.Join(v2BuildpacksDir, depsIndex),
+				V3AppDir:       v3AppDir,
+				V2DepsDir:      v2DepsDir,
+				DepsIndex:      depsIndex,
+			}
+		})
+
+		AfterEach(func() {
+			Expect(os.RemoveAll(tempDir)).To(Succeed())
+		})
+
+		Context("SetUpFirstV3Buildpack", func() {
+			It("Moves V2AppDir to V3AppDir if it has not already been moved", func() {
+				Expect(v3AppDir).NotTo(BeADirectory())
+				Expect(supplier.SetUpFirstV3Buildpack()).To(Succeed())
+				Expect(v3AppDir).To(BeADirectory())
+			})
+
+			It("Writes a sentinel file in the app dir", func() {
+				Expect(supplier.SetUpFirstV3Buildpack()).To(Succeed())
+				Expect(filepath.Join(v3AppDir, ".cloudfoundry", shims.SENTINEL)).To(BeAnExistingFile())
+			})
+
+			It("Writes a symlink at the V2AppDir to a fake file with a clear error message", func() {
+				Expect(supplier.SetUpFirstV3Buildpack()).To(Succeed())
+				linkDst, err := os.Readlink(v2AppDir)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(linkDst).To(Equal(shims.ERROR_FILE))
+			})
+
+			It("Does nothing if V2AppDir has already been moved", func() {
+				Expect(os.Remove(v2AppDir)).To(Succeed())
+				Expect(os.Symlink("some-file", v2AppDir)).To(Succeed())
+				Expect(supplier.SetUpFirstV3Buildpack()).To(Succeed())
+			})
+		})
+
+		Context("SaveOrderToml", func() {
+			It("copies its order.toml to the deps/orders dir", func() {
+				Expect(ioutil.WriteFile(filepath.Join(v2BuildpacksDir, depsIndex, "order.toml"), []byte(""), 0666)).To(Succeed())
+				Expect(supplier.SaveOrderToml()).To(Succeed())
+				Expect(filepath.Join(v2DepsDir, "order", "order"+depsIndex+".toml")).To(BeAnExistingFile())
+			})
+		})
+	})
+
+	Describe("Finalizer", func() {
+		var (
+			finalizer    shims.Finalizer
+			mockCtrl     *gomock.Controller
+			mockDetector *MockDetector
+			tempDir,
+			v2AppDir,
+			v3AppDir,
+			v2DepsDir,
+			v3LayersDir,
+			v3BuildpacksDir,
+			planMetadata,
+			groupMetadata,
+			profileDir,
+			binDir,
+			depsIndex    string
+		)
+
+		BeforeEach(func() {
+			var err error
+
+			mockCtrl = gomock.NewController(GinkgoT()) // TODO DOn't use GInkgoT?
 			mockDetector = NewMockDetector(mockCtrl)
+
+			depsIndex = "0"
 
 			tempDir, err = ioutil.TempDir("", "tmp")
 			Expect(err).NotTo(HaveOccurred())
 
-			v2BuildDir = filepath.Join(tempDir, "build")
-			Expect(os.MkdirAll(v2BuildDir, 0777)).To(Succeed())
+			v2AppDir = filepath.Join(tempDir, "v2_app")
+			Expect(os.MkdirAll(v2AppDir, 0777)).To(Succeed())
 
-			cnbAppDir = filepath.Join(tempDir, "cnb-app")
+			v3AppDir = filepath.Join(tempDir, "v3_app")
+			Expect(os.MkdirAll(v3AppDir, 0777)).To(Succeed())
 
-			binDir = filepath.Join(tempDir, "bin")
-			Expect(os.MkdirAll(binDir, 0777)).To(Succeed())
+			v2DepsDir = filepath.Join(tempDir, "deps")
+
+			v3LayersDir = filepath.Join(tempDir, "layers")
+			Expect(os.MkdirAll(v3LayersDir, 0777)).To(Succeed())
 
 			v3BuildpacksDir = filepath.Join(tempDir, "cnbs")
 			Expect(os.MkdirAll(v3BuildpacksDir, 0777)).To(Succeed())
 
-			depsDir = filepath.Join(tempDir, "deps")
-			depsIndex = "0"
-
-			layersDir = filepath.Join(tempDir, "layers")
-			Expect(os.MkdirAll(filepath.Join(layersDir, "config"), 0777)).To(Succeed())
-
-			v2BuildpacksDir = filepath.Join(tempDir, "buildpacks")
-
+			planMetadata = filepath.Join(tempDir, "plan.toml")
 			groupMetadata = filepath.Join(tempDir, "group.toml")
 
-			planMetadata = filepath.Join(tempDir, "plan.toml")
+			profileDir = filepath.Join(tempDir, "profile")
+			Expect(os.MkdirAll(profileDir, 0777)).To(Succeed())
+
+			binDir = filepath.Join(tempDir, "bin")
+			Expect(os.MkdirAll(binDir, 0777)).To(Succeed())
+
+			Expect(os.Setenv("CF_STACK", "some-stack")).To(Succeed())
+
 		})
 
 		JustBeforeEach(func() {
-			Expect(os.MkdirAll(filepath.Join(depsDir, depsIndex), 0777)).To(Succeed())
+			Expect(os.MkdirAll(filepath.Join(v2DepsDir, depsIndex), 0777)).To(Succeed())
 
-			Expect(os.MkdirAll(filepath.Join(v2BuildpacksDir, depsIndex), 0777)).To(Succeed())
-			orderMetadata = filepath.Join(v2BuildpacksDir, depsIndex, "order.toml")
-			Expect(ioutil.WriteFile(orderMetadata, []byte(""), 0666)).To(Succeed())
-
-			supplier = shims.Supplier{
-				Detector:        mockDetector,
-				BinDir:          binDir,
-				V2AppDir:        v2BuildDir,
-				V2BuildpackDir:  filepath.Join(v2BuildpacksDir, depsIndex),
-				V3AppDir:        cnbAppDir,
+			finalizer = shims.Finalizer{
+				V2AppDir:        v2AppDir,
+				V3AppDir:        v3AppDir,
+				V2DepsDir:       v2DepsDir,
+				V3LayersDir:     v3LayersDir,
 				V3BuildpacksDir: v3BuildpacksDir,
-				V2DepsDir:       depsDir,
 				DepsIndex:       depsIndex,
-				V3LayersDir:     layersDir,
-				OrderMetadata:   orderMetadata,
-				GroupMetadata:   groupMetadata,
 				PlanMetadata:    planMetadata,
+				GroupMetadata:   groupMetadata,
+				ProfileDir:      profileDir,
+				BinDir:          binDir,
+				Detector:        mockDetector,
 			}
 		})
 
 		AfterEach(func() {
 			mockCtrl.Finish()
+			Expect(os.Unsetenv("CF_STACK")).To(Succeed())
 			Expect(os.RemoveAll(tempDir)).To(Succeed())
 		})
 
-		Context("EnsureNoV2AfterV3", func() {
-			It("does not return an error when there are no V2 buildpacks", func() {
-				Expect(supplier.EnsureNoV2AfterV3()).To(Succeed())
-			})
-
-			Context("when there are V2 buildacks that have already run", func() {
-				BeforeEach(func() {
-					depsIndex = "1"
-					Expect(os.MkdirAll(filepath.Join(v2BuildpacksDir, "0"), 0777)).To(Succeed())
-					Expect(os.MkdirAll(filepath.Join(depsDir, "0"), 0777)).To(Succeed())
-				})
-
-				It("does not return an error", func() {
-					Expect(supplier.EnsureNoV2AfterV3()).To(Succeed())
-				})
-			})
-
-			Context("when there are V2 buildpacks that have not run yet", func() {
-				BeforeEach(func() {
-					depsIndex = "1"
-					Expect(os.MkdirAll(filepath.Join(v2BuildpacksDir, "0"), 0777)).To(Succeed())
-					Expect(ioutil.WriteFile(filepath.Join(v2BuildpacksDir, "0", "order.toml"), []byte(""), 0777)).To(Succeed())
-					Expect(os.MkdirAll(filepath.Join(v2BuildpacksDir, "2"), 0777)).To(Succeed())
-					Expect(os.MkdirAll(filepath.Join(depsDir, "2"), 0777)).To(Succeed())
-				})
-
-				It("returns an error", func() {
-					Expect(supplier.EnsureNoV2AfterV3()).To(Succeed())
-					Expect(filepath.Join(supplier.V2AppDir, ".cloudfoundry", "sentinal")).To(BeAnExistingFile())
-				})
-			})
-		})
-
-		Context("GetDetectorOutput", func() {
+		Context("RunV3Detect", func() {
 			It("runs detection when group or plan metadata does not exist", func() {
 				mockDetector.
 					EXPECT().
 					Detect()
-				Expect(supplier.GetDetectorOutput()).To(Succeed())
+				Expect(finalizer.RunV3Detect()).To(Succeed())
 			})
 
 			It("does NOT run detection when group and plan metadata exists", func() {
@@ -150,29 +198,29 @@ var _ = Describe("Shims", func() {
 					EXPECT().
 					Detect().
 					Times(0)
-				Expect(supplier.GetDetectorOutput()).To(Succeed())
+				Expect(finalizer.RunV3Detect()).To(Succeed())
 			})
 		})
 
 		Context("MoveV3Layers", func() {
 			BeforeEach(func() {
-				Expect(os.MkdirAll(filepath.Join(layersDir, "config"), 0777)).To(Succeed())
-				Expect(ioutil.WriteFile(filepath.Join(layersDir, "config", "metadata.toml"), []byte(""), 0666)).To(Succeed())
+				Expect(os.MkdirAll(filepath.Join(v3LayersDir, "config"), 0777)).To(Succeed())
+				Expect(ioutil.WriteFile(filepath.Join(v3LayersDir, "config", "metadata.toml"), []byte(""), 0666)).To(Succeed())
 
-				Expect(os.MkdirAll(filepath.Join(layersDir, "layer"), 0777)).To(Succeed())
-				Expect(os.MkdirAll(filepath.Join(layersDir, "anotherLayer"), 0777)).To(Succeed())
+				Expect(os.MkdirAll(filepath.Join(v3LayersDir, "layer"), 0777)).To(Succeed())
+				Expect(os.MkdirAll(filepath.Join(v3LayersDir, "anotherLayer"), 0777)).To(Succeed())
 			})
 
 			It("moves the layers to deps dir and metadata to build dir", func() {
-				Expect(supplier.MoveV3Layers()).To(Succeed())
-				Expect(filepath.Join(v2BuildDir, ".cloudfoundry", "metadata.toml")).To(BeAnExistingFile())
-				Expect(filepath.Join(depsDir, "layer")).To(BeAnExistingFile())
-				Expect(filepath.Join(depsDir, "anotherLayer")).To(BeAnExistingFile())
+				Expect(finalizer.MoveV3Layers()).To(Succeed())
+				Expect(filepath.Join(v2AppDir, ".cloudfoundry", "metadata.toml")).To(BeAnExistingFile())
+				Expect(filepath.Join(v2DepsDir, "layer")).To(BeAnExistingFile())
+				Expect(filepath.Join(v2DepsDir, "anotherLayer")).To(BeAnExistingFile())
 			})
 
 		})
 
-		Context("AddV2SupplyBuildpacks", func() {
+		Context("IncludePreviousV2Buildpacks", func() {
 			var (
 				createDirs, createFiles []string
 			)
@@ -182,11 +230,11 @@ var _ = Describe("Shims", func() {
 				createDirs = []string{"bin", "lib"}
 				createFiles = []string{"config.yml"}
 				for _, dir := range createDirs {
-					Expect(os.MkdirAll(filepath.Join(depsDir, "0", dir), 0777)).To(Succeed())
+					Expect(os.MkdirAll(filepath.Join(v2DepsDir, "0", dir), 0777)).To(Succeed())
 				}
 
 				for _, file := range createFiles {
-					Expect(ioutil.WriteFile(filepath.Join(depsDir, "0", file), []byte(file), 0666)).To(Succeed())
+					Expect(ioutil.WriteFile(filepath.Join(v2DepsDir, "0", file), []byte(file), 0666)).To(Succeed())
 				}
 
 				Expect(ioutil.WriteFile(groupMetadata, []byte(""), 0666)).To(Succeed())
@@ -195,15 +243,15 @@ var _ = Describe("Shims", func() {
 
 			It("copies v2 layers and metadata where v3 lifecycle expects them for build and launch", func() {
 				By("not failing if a layer has already been moved")
-				Expect(supplier.AddV2SupplyBuildpacks()).To(Succeed())
+				Expect(finalizer.IncludePreviousV2Buildpacks()).To(Succeed())
 
 				By("putting the v2 layers in the corrent directory structure")
 				for _, dir := range createDirs {
-					Expect(filepath.Join(layersDir, "buildpack.0", "layer", dir)).To(BeADirectory())
+					Expect(filepath.Join(v3LayersDir, "buildpack.0", "layer", dir)).To(BeADirectory())
 				}
 
 				for _, file := range createFiles {
-					Expect(filepath.Join(layersDir, "buildpack.0", "layer", file)).To(BeAnExistingFile())
+					Expect(filepath.Join(v3LayersDir, "buildpack.0", "layer", file)).To(BeAnExistingFile())
 				}
 
 				By("writing the group metadata in the order the buildpacks should be sourced")
@@ -222,21 +270,21 @@ var _ = Describe("Shims", func() {
 
 		Context("MoveV2Layers", func() {
 			It("moves directories and creates the dst dir if it doesn't exist", func() {
-				Expect(supplier.MoveV2Layers(filepath.Join(depsDir, depsIndex), filepath.Join(layersDir, "buildpack.0", "layers.0"))).To(Succeed())
-				Expect(filepath.Join(layersDir, "buildpack.0", "layers.0")).To(BeADirectory())
+				Expect(finalizer.MoveV2Layers(filepath.Join(v2DepsDir, depsIndex), filepath.Join(v3LayersDir, "buildpack.0", "layers.0"))).To(Succeed())
+				Expect(filepath.Join(v3LayersDir, "buildpack.0", "layers.0")).To(BeADirectory())
 			})
 		})
 
 		Context("RenameEnvDir", func() {
 			It("renames the env dir to env.build", func() {
-				Expect(os.Mkdir(filepath.Join(layersDir, "env"), 0777)).To(Succeed())
-				Expect(supplier.RenameEnvDir(layersDir)).To(Succeed())
-				Expect(filepath.Join(layersDir, "env.build")).To(BeADirectory())
+				Expect(os.Mkdir(filepath.Join(v3LayersDir, "env"), 0777)).To(Succeed())
+				Expect(finalizer.RenameEnvDir(v3LayersDir)).To(Succeed())
+				Expect(filepath.Join(v3LayersDir, "env.build")).To(BeADirectory())
 			})
 
 			It("does nothing when the env dir does NOT exist", func() {
-				Expect(supplier.RenameEnvDir(layersDir)).To(Succeed())
-				Expect(filepath.Join(layersDir, "env.build")).NotTo(BeADirectory())
+				Expect(finalizer.RenameEnvDir(v3LayersDir)).To(Succeed())
+				Expect(filepath.Join(v3LayersDir, "env.build")).NotTo(BeADirectory())
 			})
 		})
 
@@ -252,7 +300,7 @@ var _ = Describe("Shims", func() {
 			})
 
 			It("adds v2 buildpacks to the group.toml", func() {
-				Expect(supplier.UpdateGroupTOML("buildpack.0")).To(Succeed())
+				Expect(finalizer.UpdateGroupTOML("buildpack.0")).To(Succeed())
 				groupMetadataContents, err := ioutil.ReadFile(groupMetadata)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(groupMetadataContents)).To(Equal(`[[buildpacks]]
@@ -273,7 +321,7 @@ var _ = Describe("Shims", func() {
 		Context("AddFakeCNBBuildpack", func() {
 			It("adds the v2 buildpack as a no-op cnb buildpack", func() {
 				Expect(os.Setenv("CF_STACK", "cflinuxfs3")).To(Succeed())
-				Expect(supplier.AddFakeCNBBuildpack("buildpack.0")).To(Succeed())
+				Expect(finalizer.AddFakeCNBBuildpack("buildpack.0")).To(Succeed())
 				buildpackTOML, err := ioutil.ReadFile(filepath.Join(v3BuildpacksDir, "buildpack.0", "latest", "buildpack.toml"))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(buildpackTOML)).To(Equal(`[buildpack]
@@ -287,43 +335,6 @@ var _ = Describe("Shims", func() {
 
 				Expect(filepath.Join(v3BuildpacksDir, "buildpack.0", "latest", "bin", "build")).To(BeAnExistingFile())
 			})
-		})
-	})
-
-	Describe("Finalizer", func() {
-		var (
-			finalizer                                          shims.Finalizer
-			tempDir, v2AppDir, v3AppDir, profileDir, depsIndex string
-		)
-
-		BeforeEach(func() {
-			var err error
-
-			depsIndex = "0"
-
-			tempDir, err = ioutil.TempDir("", "tmp")
-			Expect(err).NotTo(HaveOccurred())
-
-			v2AppDir = filepath.Join(tempDir, "v2_app")
-			Expect(os.MkdirAll(v2AppDir, 0777)).To(Succeed())
-
-			v3AppDir = filepath.Join(tempDir, "v3_app")
-			Expect(os.MkdirAll(v3AppDir, 0777)).To(Succeed())
-
-			profileDir = filepath.Join(tempDir, "profile")
-			Expect(os.MkdirAll(profileDir, 0777)).To(Succeed())
-
-			Expect(os.Setenv("CF_STACK", "some-stack")).To(Succeed())
-
-		})
-
-		JustBeforeEach(func() {
-			finalizer = shims.Finalizer{V2AppDir: v2AppDir, V3AppDir: v3AppDir, DepsIndex: depsIndex, ProfileDir: profileDir}
-		})
-
-		AfterEach(func() {
-			Expect(os.Unsetenv("CF_STACK")).To(Succeed())
-			Expect(os.RemoveAll(tempDir)).To(Succeed())
 		})
 
 		It("writes a profile.d script for the V2 lifecycle to exec which calls the v3-launcher", func() {
@@ -342,15 +353,15 @@ exec $DEPS_DIR/v3-launcher "$2"
 
 	Describe("Releaser", func() {
 		var (
-			releaser   shims.Releaser
-			v2BuildDir string
-			buf        *bytes.Buffer
+			releaser shims.Releaser
+			v2AppDir string
+			buf      *bytes.Buffer
 		)
 
 		BeforeEach(func() {
 			var err error
 
-			v2BuildDir, err = ioutil.TempDir("", "build")
+			v2AppDir, err = ioutil.TempDir("", "build")
 			Expect(err).NotTo(HaveOccurred())
 
 			contents := `
@@ -359,25 +370,25 @@ exec $DEPS_DIR/v3-launcher "$2"
 			type = "web"
 			command = "npm start"
 			`
-			Expect(os.MkdirAll(filepath.Join(v2BuildDir, ".cloudfoundry"), 0777)).To(Succeed())
-			Expect(ioutil.WriteFile(filepath.Join(v2BuildDir, ".cloudfoundry", "metadata.toml"), []byte(contents), 0666)).To(Succeed())
+			Expect(os.MkdirAll(filepath.Join(v2AppDir, ".cloudfoundry"), 0777)).To(Succeed())
+			Expect(ioutil.WriteFile(filepath.Join(v2AppDir, ".cloudfoundry", "metadata.toml"), []byte(contents), 0666)).To(Succeed())
 
 			buf = &bytes.Buffer{}
 
 			releaser = shims.Releaser{
-				MetadataPath: filepath.Join(v2BuildDir, ".cloudfoundry", "metadata.toml"),
+				MetadataPath: filepath.Join(v2AppDir, ".cloudfoundry", "metadata.toml"),
 				Writer:       buf,
 			}
 		})
 
 		AfterEach(func() {
-			Expect(os.RemoveAll(v2BuildDir)).To(Succeed())
+			Expect(os.RemoveAll(v2AppDir)).To(Succeed())
 		})
 
 		It("runs with the correct arguments and moves things to the correct place", func() {
 			Expect(releaser.Release()).To(Succeed())
 			Expect(buf.Bytes()).To(Equal([]byte("default_process_types:\n  web: npm start\n")))
-			Expect(filepath.Join(v2BuildDir, ".cloudfoundry", "metadata.toml")).NotTo(BeAnExistingFile())
+			Expect(filepath.Join(v2AppDir, ".cloudfoundry", "metadata.toml")).NotTo(BeAnExistingFile())
 		})
 	})
 
