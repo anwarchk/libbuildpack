@@ -9,7 +9,7 @@ import (
 
 type Supplier struct {
 	V2AppDir       string
-	V3AppDir        string
+	V3AppDir       string
 	V2DepsDir      string
 	DepsIndex      string
 	V2BuildpackDir string
@@ -17,7 +17,7 @@ type Supplier struct {
 
 const (
 	ERROR_FILE = "Error V2 Buildpack After V3 Buildpack"
-	SENTINEL = "sentinel"
+	SENTINEL   = "sentinel"
 )
 
 func (s *Supplier) Supply() error {
@@ -29,16 +29,15 @@ func (s *Supplier) Supply() error {
 }
 
 func (s *Supplier) SetUpFirstV3Buildpack() error {
-	fi, err := os.Lstat(s.V2AppDir)
+	exists, err := v3symlinkExists(s.V2AppDir)
 	if err != nil {
 		return err
 	}
-	
-	if fi.Mode() & os.ModeSymlink == os.ModeSymlink {
+	if exists {
 		return nil
 	}
 
-	if err := os.Rename(s.V2AppDir, s.V3AppDir); err != nil {
+	if err := moveContent(s.V2AppDir, s.V3AppDir); err != nil {
 		return err
 	}
 
@@ -56,6 +55,7 @@ func (s *Supplier) SetUpFirstV3Buildpack() error {
 		return err
 	}
 
+	fmt.Println("DO WE GET HERE?")
 	return nil
 }
 
@@ -66,4 +66,29 @@ func (s *Supplier) SaveOrderToml() error {
 	}
 
 	return libbuildpack.CopyFile(filepath.Join(s.V2BuildpackDir, "order.toml"), filepath.Join(orderDir, fmt.Sprintf("order%s.toml", s.DepsIndex)))
+}
+
+func moveContent(source, destination string) error {
+	fmt.Println("========================================================1====================")
+	if err := os.Remove(destination); err != nil {
+		return err
+	}
+
+	fmt.Println("========================================================2====================")
+	if err := os.Rename(source, destination); err != nil {
+		return err
+	}
+	return nil
+}
+
+func v3symlinkExists(path string) (bool, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return false, err
+	}
+
+	if fi.Mode()&os.ModeSymlink == os.ModeSymlink {
+		return true, nil
+	}
+	return false, nil
 }

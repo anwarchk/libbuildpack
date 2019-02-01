@@ -337,17 +337,64 @@ var _ = Describe("Shims", func() {
 			})
 		})
 
-		It("writes a profile.d script for the V2 lifecycle to exec which calls the v3-launcher", func() {
-			Expect(finalizer.Finalize()).To(Succeed())
+		Context("MergeOrderTOMLs", func() {
+			BeforeEach(func() {
+				const (
+					ORDER1 = "order1.toml"
+					ORDER2 = "order2.toml"
+				)
 
-			contents, err := ioutil.ReadFile(filepath.Join(profileDir, "0_shim.sh"))
-			Expect(err).NotTo(HaveOccurred())
+				orderPath := filepath.Join(v2DepsDir, "order")
+				Expect(os.MkdirAll(orderPath, 0777)).To(Succeed())
+				orderFileA := filepath.Join(orderPath, ORDER1)
+				Expect(ioutil.WriteFile(orderFileA, []byte(`[[groups]]
+  labels = ["testA"]
 
-			Expect(string(contents)).To(Equal(`export PACK_STACK_ID="org.cloudfoundry.stacks.some-stack"
-export PACK_LAYERS_DIR="$DEPS_DIR"
-export PACK_APP_DIR="$HOME"
-exec $DEPS_DIR/v3-launcher "$2"
-`))
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpA"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpB"
+    version = "latest"`), 0777)).To(Succeed())
+
+				orderFileB := filepath.Join(orderPath, ORDER2)
+				Expect(ioutil.WriteFile(orderFileB, []byte(`[[groups]]
+  labels = ["testA"]
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpC"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpD"
+    version = "latest"`), 0777)).To(Succeed())
+			})
+
+			It("merges the order files", func() {
+				Expect(finalizer.MergeOrderTOMLs()).To(Succeed())
+				orderTOML, err := ioutil.ReadFile(filepath.Join(v2DepsDir, "order.toml"))
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(string(orderTOML)).To(ContainSubstring(`[[groups]]
+  labels = ["testA"]
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpA"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpB"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpC"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpD"
+    version = "latest"`))
+			})
 		})
 	})
 

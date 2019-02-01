@@ -19,7 +19,7 @@ func main() {
 	finalizer := shims.Finalizer{
 		V2AppDir:   os.Args[1],
 		V3AppDir:   filepath.Join(string(filepath.Separator), "home", "vcap", "app"),
-		V2DepsDir: v2DepsDir,
+		V2DepsDir:  v2DepsDir,
 		DepsIndex:  os.Args[4],
 		ProfileDir: os.Args[5],
 	}

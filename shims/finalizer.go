@@ -1,6 +1,7 @@
 package shims
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/cloudfoundry/libbuildpack"
@@ -29,17 +30,32 @@ type Finalizer struct {
 	Detector        Detector
 }
 
-func (f *Finalizer) Finalize() error {
+type OrderGroups struct {
+	OrderGroup []OrderGroup `toml:"groups"`
+}
 
+type OrderGroup struct {
+	Labels     []string             `toml:"labels"`
+	Buildpacks []BuildPackOrderTOML `toml:"buildpacks"`
+}
+
+type BuildPackOrderTOML struct {
+	Id      string `toml:"id"`
+	Version string `toml:"version"`
+}
+
+func (f *Finalizer) Finalize() error {
 	if err := os.RemoveAll(f.V2AppDir); err != nil {
 		return err
 	}
-
 	if err := f.IncludePreviousV2Buildpacks(); err != nil {
 		return err
 	}
-	//
-	// MergeOrderTomls
+
+	if err := f.MergeOrderTOMLs(); err != nil {
+		return err
+	}
+
 	//
 	// if err := f.Installer.InstallCNBS(f.OrderMetadata, f.V3BuildpacksDir); err != nil {
 	// 	return err
@@ -65,7 +81,6 @@ func (f *Finalizer) Finalize() error {
 	// if err := f.Installer.InstallOnlyVersion("v3-launcher", f.V2DepsDir); err != nil {
 	// 	return err
 	// }
-
 	if err := os.Rename(f.V3AppDir, f.V2AppDir); err != nil {
 		return err
 	}
@@ -79,6 +94,55 @@ exec $DEPS_DIR/v3-launcher "$2"
 		os.Getenv("CF_STACK"))
 
 	return ioutil.WriteFile(filepath.Join(f.ProfileDir, "0_shim.sh"), []byte(profileContents), 0666)
+}
+
+func (f *Finalizer) MergeOrderTOMLs() error {
+	var accumulator []OrderGroups
+
+	if err :=  filepath.Walk(filepath.Join(f.V2DepsDir, "order"), func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+
+		orderTOML, err := parseOrderTOML(path)
+		if err != nil {
+			return err
+		}
+
+		accumulator = append(accumulator, orderTOML)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	finalToml := accumulator[0]
+	finalBuildpacks := &finalToml.OrderGroup[0].Buildpacks
+
+	for i := 1; i < len(accumulator); i++ {
+		curToml := accumulator[i]
+		curBuildpacks := curToml.OrderGroup[0].Buildpacks
+		*finalBuildpacks = append(*finalBuildpacks, curBuildpacks...)
+	}
+
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(finalToml); err != nil {
+		return err
+	}
+
+	finalTomlPath := filepath.Join(f.V2DepsDir, "order.toml")
+	if err := ioutil.WriteFile(finalTomlPath, buf.Bytes(), 0666); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func parseOrderTOML(path string) (OrderGroups, error) {
+	var order OrderGroups
+	if _, err := toml.DecodeFile(path, &order); err != nil {
+		return order, err
+	}
+	return order, nil
 }
 
 func (f *Finalizer) RunV3Detect() error {
@@ -96,28 +160,22 @@ func (f *Finalizer) IncludePreviousV2Buildpacks() error {
 	if err != nil {
 		return err
 	}
-
 	if err := os.RemoveAll(filepath.Join(f.V2DepsDir, f.DepsIndex)); err != nil {
 		return err
 	}
-
 	for supplyDepsIndex := myIDx - 1; supplyDepsIndex >= 0; supplyDepsIndex-- {
 		v2Layer := filepath.Join(f.V2DepsDir, strconv.Itoa(supplyDepsIndex))
 		buildpackID := fmt.Sprintf("buildpack.%d", supplyDepsIndex)
 		v3Layer := filepath.Join(f.V3LayersDir, buildpackID, "layer")
-
 		if err := f.MoveV2Layers(v2Layer, v3Layer); err != nil {
 			return err
 		}
-
 		if err := f.RenameEnvDir(v3Layer); err != nil {
 			return err
 		}
-
 		if err := f.UpdateGroupTOML(buildpackID); err != nil {
 			return err
 		}
-
 		if err := f.AddFakeCNBBuildpack(buildpackID); err != nil {
 			return err
 		}
@@ -192,6 +250,7 @@ func (f *Finalizer) RenameEnvDir(dst string) error {
 func (f *Finalizer) UpdateGroupTOML(buildpackID string) error {
 	var groupMetadata group
 
+	// TODO f.GroupMetadata is an empty string! - crashes here
 	if _, err := toml.DecodeFile(f.GroupMetadata, &groupMetadata); err != nil {
 		return err
 	}

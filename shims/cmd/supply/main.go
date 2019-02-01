@@ -1,13 +1,11 @@
 package main
 
 import (
+	"github.com/cloudfoundry/libbuildpack"
+	"github.com/cloudfoundry/libbuildpack/shims"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"time"
-
-	"github.com/cloudfoundry/libbuildpack"
-	"github.com/cloudfoundry/libbuildpack/shims"
 )
 
 var logger = libbuildpack.NewLogger(os.Stdout)
@@ -63,35 +61,9 @@ func supply(logger *libbuildpack.Logger) error {
 	}
 	defer os.RemoveAll(v3BuildpacksDir)
 
-	orderMetadata := filepath.Join(buildpackDir, "order.toml")
-	groupMetadata := filepath.Join(tempDir, "group.toml")
-	planMetadata := filepath.Join(tempDir, "plan.toml")
-	binDir := filepath.Join(tempDir, "bin")
-
-	manifest, err := libbuildpack.NewManifest(buildpackDir, logger, time.Now())
-	if err != nil {
-		return err
-	}
-
-	installer := shims.NewCNBInstaller(manifest)
-
-	detector := shims.DefaultDetector{
-		BinDir: binDir,
-
-		V2AppDir: v2AppDir,
-
-		V3BuildpacksDir: v3BuildpacksDir,
-
-		OrderMetadata: orderMetadata,
-		GroupMetadata: groupMetadata,
-		PlanMetadata:  planMetadata,
-
-		Installer: installer,
-	}
-
 	supplier := shims.Supplier{
 		V2AppDir:       v2AppDir,
-		V3AppDir:        v3AppDir,
+		V3AppDir:       v3AppDir,
 		V2DepsDir:      v2DepsDir,
 		DepsIndex:      depsIndex,
 		V2BuildpackDir: buildpackDir,
