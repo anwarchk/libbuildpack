@@ -16,6 +16,7 @@ func main() {
 
 	v2DepsDir := os.Args[3]
 
+	// TODO: do we need to make sure all of Finalizer's fields are initialized?
 	finalizer := shims.Finalizer{
 		V2AppDir:   os.Args[1],
 		V3AppDir:   filepath.Join(string(filepath.Separator), "home", "vcap", "app"),

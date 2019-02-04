@@ -1,7 +1,6 @@
 package shims
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/cloudfoundry/libbuildpack"
@@ -28,20 +27,6 @@ type Finalizer struct {
 	ProfileDir      string
 	BinDir          string
 	Detector        Detector
-}
-
-type OrderGroups struct {
-	OrderGroup []OrderGroup `toml:"groups"`
-}
-
-type OrderGroup struct {
-	Labels     []string             `toml:"labels"`
-	Buildpacks []BuildPackOrderTOML `toml:"buildpacks"`
-}
-
-type BuildPackOrderTOML struct {
-	Id      string `toml:"id"`
-	Version string `toml:"version"`
 }
 
 func (f *Finalizer) Finalize() error {
@@ -97,41 +82,37 @@ exec $DEPS_DIR/v3-launcher "$2"
 }
 
 func (f *Finalizer) MergeOrderTOMLs() error {
-	// TOML --> Golang
-	var accumulator []OrderGroups
+	// TOML --> Golang structs
+	var tomls []order
+	orderFiles, err := ioutil.ReadDir(filepath.Join(f.V2DepsDir, "order"))
+	if err != nil {
+		return err
+	}
 
-	if err :=  filepath.Walk(filepath.Join(f.V2DepsDir, "order"), func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
-
-		orderTOML, err := parseOrderTOML(path)
+	for _, file := range orderFiles {
+		orderTOML, err := parseOrderTOML(filepath.Join(f.V2DepsDir, "order", file.Name()))
 		if err != nil {
 			return err
 		}
 
-		accumulator = append(accumulator, orderTOML)
-		return nil
-	}); err != nil {
-		return err
+		tomls = append(tomls, orderTOML)
 	}
 
 	// Combine TOMLs
-	// TODO: what to do with labels?
-	finalToml := accumulator[0]
-	finalBuildpacks := &finalToml.OrderGroup[0].Buildpacks
+	// TODO: what to do with labels? currently only use the first toml's label
+	finalToml := tomls[0]
+	finalBuildpacks := &finalToml.Groups[0].Buildpacks
 
-	for i := 1; i < len(accumulator); i++ {
-		curToml := accumulator[i]
-		curBuildpacks := curToml.OrderGroup[0].Buildpacks
+	for i := 1; i < len(tomls); i++ {
+		curToml := tomls[i]
+		curBuildpacks := curToml.Groups[0].Buildpacks
 		*finalBuildpacks = append(*finalBuildpacks, curBuildpacks...)
 	}
 
-
-	// Filter duplicates
+	// Filter duplicate buildpacks
 	for i := range *finalBuildpacks {
 		for j := i + 1; j < len(*finalBuildpacks); {
-			if (*finalBuildpacks)[i].Id == (*finalBuildpacks)[j].Id {
+			if (*finalBuildpacks)[i].ID == (*finalBuildpacks)[j].ID {
 				*finalBuildpacks = append((*finalBuildpacks)[:j], (*finalBuildpacks)[j+1:]...)
 			} else {
 				j++
@@ -139,22 +120,14 @@ func (f *Finalizer) MergeOrderTOMLs() error {
 		}
 	}
 
-	// Golang --> TOML
-	var buf bytes.Buffer
-	if err := toml.NewEncoder(&buf).Encode(finalToml); err != nil {
-		return err
-	}
-
+	// Golang structs --> TOML
 	finalTomlPath := filepath.Join(f.V2DepsDir, "order.toml")
-	if err := ioutil.WriteFile(finalTomlPath, buf.Bytes(), 0666); err != nil {
-		return err
-	}
 
-	return nil
+	return encodeTOML(finalTomlPath, finalToml)
 }
 
-func parseOrderTOML(path string) (OrderGroups, error) {
-	var order OrderGroups
+func parseOrderTOML(path string) (order, error) {
+	var order order
 	if _, err := toml.DecodeFile(path, &order); err != nil {
 		return order, err
 	}
@@ -267,19 +240,14 @@ func (f *Finalizer) UpdateGroupTOML(buildpackID string) error {
 	var groupMetadata group
 
 	// TODO f.GroupMetadata is an empty string! - crashes here
+	// might need to worry about initializing GroupMetadata for finalizer in finalize/main.go?
 	if _, err := toml.DecodeFile(f.GroupMetadata, &groupMetadata); err != nil {
 		return err
 	}
 
 	groupMetadata.Buildpacks = append([]buildpack{{ID: buildpackID}}, groupMetadata.Buildpacks...)
 
-	file, err := os.Create(f.GroupMetadata)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	return toml.NewEncoder(file).Encode(groupMetadata)
+	return encodeTOML(f.GroupMetadata, groupMetadata)
 }
 
 func (f *Finalizer) AddFakeCNBBuildpack(buildpackID string) error {
@@ -303,7 +271,7 @@ func (f *Finalizer) AddFakeCNBBuildpack(buildpackID string) error {
 		ID string `toml:"id"`
 	}
 
-	if err = toml.NewEncoder(buildpackMetadataFile).Encode(struct {
+	if err = encodeTOML(filepath.Join(buildpackPath, "buildpack.toml"), struct {
 		Buildpack buildpack `toml:"buildpack"`
 		Stacks    []stack   `toml:"stacks"`
 	}{
@@ -324,4 +292,14 @@ func (f *Finalizer) AddFakeCNBBuildpack(buildpackID string) error {
 	}
 
 	return ioutil.WriteFile(filepath.Join(buildpackPath, "bin", "build"), []byte(`#!/bin/bash`), 0777)
+}
+
+func encodeTOML(dest string, data interface{}) error {
+	destFile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	return toml.NewEncoder(destFile).Encode(data)
 }

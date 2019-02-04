@@ -356,7 +356,8 @@ var _ = Describe("Shims", func() {
 
   [[groups.buildpacks]]
     id = "this.is.a.fake.bpB"
-    version = "latest"`), 0777)).To(Succeed())
+    version = "latest"
+	optional = true`), 0777)).To(Succeed())
 
 				orderFileB := filepath.Join(orderPath, ORDER2)
 				Expect(ioutil.WriteFile(orderFileB, []byte(`[[groups]]
@@ -386,6 +387,7 @@ var _ = Describe("Shims", func() {
   [[groups.buildpacks]]
     id = "this.is.a.fake.bpB"
     version = "latest"
+    optional = true
 
   [[groups.buildpacks]]
     id = "this.is.a.fake.bpC"
