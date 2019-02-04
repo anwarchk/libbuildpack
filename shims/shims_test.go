@@ -337,7 +337,7 @@ var _ = Describe("Shims", func() {
 			})
 		})
 
-		Context("MergeOrderTOMLs", func() {
+		Context("MergeOrderTOMLs with unique buildpacks", func() {
 			BeforeEach(func() {
 				const (
 					ORDER1 = "order1.toml"
@@ -393,6 +393,62 @@ var _ = Describe("Shims", func() {
 
   [[groups.buildpacks]]
     id = "this.is.a.fake.bpD"
+    version = "latest"`))
+			})
+		})
+
+		Context("MergeOrderTOMLs with duplicate buildpacks", func() {
+			BeforeEach(func() {
+				const (
+					ORDER1 = "order1.toml"
+					ORDER2 = "order2.toml"
+				)
+
+				orderPath := filepath.Join(v2DepsDir, "order")
+				Expect(os.MkdirAll(orderPath, 0777)).To(Succeed())
+				orderFileA := filepath.Join(orderPath, ORDER1)
+				Expect(ioutil.WriteFile(orderFileA, []byte(`[[groups]]
+  labels = ["testA"]
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpA"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpB"
+    version = "latest"`), 0777)).To(Succeed())
+
+				orderFileB := filepath.Join(orderPath, ORDER2)
+				Expect(ioutil.WriteFile(orderFileB, []byte(`[[groups]]
+  labels = ["testA"]
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpA"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpC"
+    version = "latest"`), 0777)).To(Succeed())
+			})
+
+			It("merges the order files", func() {
+				Expect(finalizer.MergeOrderTOMLs()).To(Succeed())
+				orderTOML, err := ioutil.ReadFile(filepath.Join(v2DepsDir, "order.toml"))
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(string(orderTOML)).To(ContainSubstring(`[[groups]]
+  labels = ["testA"]
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpA"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpB"
+    version = "latest"
+
+  [[groups.buildpacks]]
+    id = "this.is.a.fake.bpC"
     version = "latest"`))
 			})
 		})

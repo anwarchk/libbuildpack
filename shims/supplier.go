@@ -69,12 +69,10 @@ func (s *Supplier) SaveOrderToml() error {
 }
 
 func moveContent(source, destination string) error {
-	fmt.Println("========================================================1====================")
-	if err := os.Remove(destination); err != nil {
+	if err := os.RemoveAll(destination); err != nil {
 		return err
 	}
 
-	fmt.Println("========================================================2====================")
 	if err := os.Rename(source, destination); err != nil {
 		return err
 	}

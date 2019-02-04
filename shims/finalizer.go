@@ -57,9 +57,9 @@ func (f *Finalizer) Finalize() error {
 	}
 
 	//
-	// if err := f.Installer.InstallCNBS(f.OrderMetadata, f.V3BuildpacksDir); err != nil {
-	// 	return err
-	// }
+	//if err := f.Installer.InstallCNBS(f.OrderMetadata, f.V3BuildpacksDir); err != nil {
+	//	return err
+	//}
 	//
 	// if err := f.RunV3Detect(); err != nil {
 	// 	return err
@@ -97,6 +97,7 @@ exec $DEPS_DIR/v3-launcher "$2"
 }
 
 func (f *Finalizer) MergeOrderTOMLs() error {
+	// TOML --> Golang
 	var accumulator []OrderGroups
 
 	if err :=  filepath.Walk(filepath.Join(f.V2DepsDir, "order"), func(path string, info os.FileInfo, err error) error {
@@ -115,6 +116,8 @@ func (f *Finalizer) MergeOrderTOMLs() error {
 		return err
 	}
 
+	// Combine TOMLs
+	// TODO: what to do with labels?
 	finalToml := accumulator[0]
 	finalBuildpacks := &finalToml.OrderGroup[0].Buildpacks
 
@@ -124,6 +127,19 @@ func (f *Finalizer) MergeOrderTOMLs() error {
 		*finalBuildpacks = append(*finalBuildpacks, curBuildpacks...)
 	}
 
+
+	// Filter duplicates
+	for i := range *finalBuildpacks {
+		for j := i + 1; j < len(*finalBuildpacks); {
+			if (*finalBuildpacks)[i].Id == (*finalBuildpacks)[j].Id {
+				*finalBuildpacks = append((*finalBuildpacks)[:j], (*finalBuildpacks)[j+1:]...)
+			} else {
+				j++
+			}
+		}
+	}
+
+	// Golang --> TOML
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(finalToml); err != nil {
 		return err
