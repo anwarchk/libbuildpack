@@ -55,7 +55,6 @@ func (s *Supplier) SetUpFirstV3Buildpack() error {
 		return err
 	}
 
-	fmt.Println("DO WE GET HERE?")
 	return nil
 }
 

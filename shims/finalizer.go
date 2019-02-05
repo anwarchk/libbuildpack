@@ -15,6 +15,11 @@ type Detector interface {
 	Detect() error
 }
 
+type Installer interface {
+	InstallOnlyVersion(depName string, installDir string) error
+	InstallCNBS(orderFile string, installDir string) error
+}
+
 type Finalizer struct {
 	V2AppDir        string
 	V3AppDir        string
@@ -26,7 +31,9 @@ type Finalizer struct {
 	GroupMetadata   string
 	ProfileDir      string
 	BinDir          string
+	OrderMetadata	string
 	Detector        Detector
+	Installer		Installer
 }
 
 func (f *Finalizer) Finalize() error {
@@ -41,10 +48,10 @@ func (f *Finalizer) Finalize() error {
 		return err
 	}
 
-	//
-	//if err := f.Installer.InstallCNBS(f.OrderMetadata, f.V3BuildpacksDir); err != nil {
-	//	return err
-	//}
+
+	if err := f.Installer.InstallCNBS(f.OrderMetadata, f.V3BuildpacksDir); err != nil {
+		return err
+	}
 	//
 	// if err := f.RunV3Detect(); err != nil {
 	// 	return err

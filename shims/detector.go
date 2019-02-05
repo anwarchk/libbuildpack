@@ -6,11 +6,6 @@ import (
 	"path/filepath"
 )
 
-type Installer interface {
-	InstallOnlyVersion(depName string, installDir string) error
-	InstallCNBS(orderFile string, installDir string) error
-}
-
 type DefaultDetector struct {
 	BinDir string
 

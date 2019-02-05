@@ -123,7 +123,7 @@ var _ = Describe("Shims", func() {
 		BeforeEach(func() {
 			var err error
 
-			mockCtrl = gomock.NewController(GinkgoT()) // TODO DOn't use GInkgoT?
+			mockCtrl = gomock.NewController(GinkgoT())
 			mockDetector = NewMockDetector(mockCtrl)
 
 			depsIndex = "0"
