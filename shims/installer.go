@@ -10,8 +10,9 @@ import (
 )
 
 type buildpack struct {
-	ID      string `toml:"id"`
-	Version string `toml:"version"`
+	ID       string `toml:"id"`
+	Version  string `toml:"version"`
+	Optional bool   `toml:"optional,omitempty"`
 }
 
 type group struct {

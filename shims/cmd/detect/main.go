@@ -2,11 +2,11 @@ package main
 
 import (
 	"github.com/cloudfoundry/libbuildpack"
+	"github.com/cloudfoundry/libbuildpack/shims"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/cloudfoundry/libbuildpack/shims"
 )
 
 func main() {
@@ -17,36 +17,43 @@ func main() {
 		os.Exit(1)
 	}
 
-	appDir := os.Args[1]
+	v2AppDir := os.Args[1]
 
-	buildpackDir, err := libbuildpack.GetBuildpackDir()
+	tempDir, err := ioutil.TempDir("","temp")
+	if err != nil {
+		logger.Error("Unable to create temp dir: %s", err.Error())
+		os.Exit(1)
+	}
+
+	v2BuildpackDir, err := libbuildpack.GetBuildpackDir()
 	if err != nil {
 		logger.Error("Unable to find buildpack directory: %s", err.Error())
 		os.Exit(1)
 	}
 
-	workspaceDir, err := filepath.Abs(filepath.Join(appDir, ".."))
+	//TODO: IS THIS THE RIGHT DIR TO PUT THIS?
+	metadataDir, err := filepath.Abs(filepath.Join(v2AppDir, ".."))
 	if err != nil {
 		logger.Error("Unable to find workspace directory: %s", err.Error())
 		os.Exit(1)
 	}
 
-	manifest, err := libbuildpack.NewManifest(buildpackDir, logger, time.Now())
+	manifest, err := libbuildpack.NewManifest(v2BuildpackDir, logger, time.Now())
 	if err != nil {
 		logger.Error("Unable to load buildpack manifest: %s", err.Error())
 		os.Exit(1)
 	}
 
 	detector := shims.DefaultDetector{
-		BinDir: filepath.Join(workspaceDir, "bin"),
+		V3LifecycleDir: tempDir,
 
-		V2AppDir: appDir,
+		AppDir: v2AppDir,
 
-		V3BuildpacksDir: filepath.Join(workspaceDir, "cnbs"),
+		V3BuildpacksDir: tempDir,
 
-		OrderMetadata: filepath.Join(buildpackDir, "order.toml"),
-		GroupMetadata: filepath.Join(workspaceDir, "group.toml"),
-		PlanMetadata:  filepath.Join(workspaceDir, "plan.toml"),
+		OrderMetadata: filepath.Join(v2BuildpackDir, "order.toml"),
+		GroupMetadata: filepath.Join(metadataDir, "group.toml"),
+		PlanMetadata:  filepath.Join(metadataDir, "plan.toml"),
 
 		Installer: shims.NewCNBInstaller(manifest),
 	}

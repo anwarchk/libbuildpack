@@ -1,13 +1,12 @@
 package main
 
 import (
-	"io/ioutil"
+	"github.com/cloudfoundry/libbuildpack"
+	"github.com/cloudfoundry/libbuildpack/shims"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/cloudfoundry/libbuildpack"
-	"github.com/cloudfoundry/libbuildpack/shims"
 )
 
 var logger = libbuildpack.NewLogger(os.Stdout)
@@ -41,72 +40,31 @@ func supply(logger *libbuildpack.Logger) error {
 		return err
 	}
 
-	tempDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tempDir)
-
-	v3LayersDir := filepath.Join(string(filepath.Separator), "home", "vcap", "deps")
-	err = os.MkdirAll(v3LayersDir, 0777)
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(v3LayersDir)
-
 	v3AppDir := filepath.Join(string(filepath.Separator), "home", "vcap", "app")
+	if err := os.MkdirAll(v3AppDir, 0777); err != nil {
+		return err
+	}
 
-	v3BuildpacksDir := filepath.Join(tempDir, "cnbs")
+	v3BuildpacksDir := filepath.Join(v2DepsDir, "cnbs")
 	err = os.MkdirAll(v3BuildpacksDir, 0777)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(v3BuildpacksDir)
-
-	orderMetadata := filepath.Join(buildpackDir, "order.toml")
-	groupMetadata := filepath.Join(tempDir, "group.toml")
-	planMetadata := filepath.Join(tempDir, "plan.toml")
-	binDir := filepath.Join(tempDir, "bin")
 
 	manifest, err := libbuildpack.NewManifest(buildpackDir, logger, time.Now())
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
-
 	installer := shims.NewCNBInstaller(manifest)
 
-	detector := shims.DefaultDetector{
-		BinDir: binDir,
-
-		V2AppDir: v2AppDir,
-
-		V3BuildpacksDir: v3BuildpacksDir,
-
-		OrderMetadata: orderMetadata,
-		GroupMetadata: groupMetadata,
-		PlanMetadata:  planMetadata,
-
-		Installer: installer,
-	}
-
 	supplier := shims.Supplier{
-		BinDir: binDir,
-
-		V2AppDir:       v2AppDir,
-		V2DepsDir:      v2DepsDir,
-		V2BuildpackDir: buildpackDir,
-		DepsIndex:      depsIndex,
-
+		V2AppDir:        v2AppDir,
 		V3AppDir:        v3AppDir,
+		V2DepsDir:       v2DepsDir,
+		DepsIndex:       depsIndex,
+		V2BuildpackDir:  buildpackDir,
 		V3BuildpacksDir: v3BuildpacksDir,
-		V3LayersDir:     v3LayersDir,
-
-		OrderMetadata: orderMetadata,
-		GroupMetadata: groupMetadata,
-		PlanMetadata:  planMetadata,
-
-		Detector:  detector,
-		Installer: installer,
+		Installer:       installer,
 	}
 
 	return supplier.Supply()
